@@ -15,7 +15,8 @@ import re
 import datetime
 from java.io import File
 from java.io import FileOutputStream
-
+import sys
+from oracle.security.jps.mas.mgmt.jmx.credstore import PortableCredential
 
 def resubmit_files_in_bulk(is_dry):
     """
@@ -215,6 +216,38 @@ def resubmit_files_by_ids():
         log("ERROR", str(e))
 
 
+def get_keys():
+    """
+    This function returns a list of keys with corresponding passwords
+    """
+    domainRuntime()
+
+    try:
+        key_pwd_list = []
+        obj_name = ObjectName("com.oracle.jps:type=JpsCredentialStore")
+        sign = ["java.lang.String"]
+        params = ["mftapp"]
+        output = str(mbs.invoke(obj_name, "getPortableCredentialMap", params, sign))
+        output_split = output.split("contents=")
+        key_pattern = re.compile(r"(key=)([a-zA-Z0-9_-]+)")
+        pwd_pattern = re.compile(r"(password=)([^ ,]+)")
+        for line in output_split:
+            key = key_pattern.search(line)
+            pwd = pwd_pattern.search(line)
+            if key and pwd:
+                key_pwd_list.append([key.group(2), pwd.group(2)])
+        # Create report
+        print("REPORT: KEY-PWD LIST, " + url + ", " + cur_dt())
+        print("KEY                                          PASSWORD")
+        for line in key_pwd_list:
+            print(line[0] + ": " + line[1])
+        print("")
+        log("INFO", "get_keys completed.")
+
+    except (WLSTException, ValueError, NameError, Exception, AttributeError, TypeError, JavaException), e:
+        log("ERROR", str(e))
+
+
 def cur_dt():
     """
     This function returns current date time in %Y-%m-%d_%H%M%S format, i.e. 2018-08-27_132815
@@ -275,7 +308,8 @@ def main():
             print("[1] Resubmit files in bulk using filter (DRY RUN)")
             print("[2] Resubmit files in bulk using filter")
             print("[3] Resubmit files by Target IDs")
-            print("[4] Exit")
+            print("[4] Get list of key/pwd")
+            print("[5] Exit")
             print("")
             procedure = raw_input("[INPUT] Choose what you want to do from the list above: ")
             print("")
@@ -290,6 +324,9 @@ def main():
             elif procedure == "3":
                 is_connected = start_connect("resubmit_files_by_ids", is_connected)
                 resubmit_files_by_ids()
+            elif procedure == "4":
+                is_connected = start_connect("get_keys", is_connected)
+                get_keys()
             else:
                 break
         log_file.close()
